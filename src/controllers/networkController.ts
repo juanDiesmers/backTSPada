@@ -1,44 +1,54 @@
 import { UploadedFile } from "express-fileupload";
-import { NetworkData, Node, Edge } from "../types";
+import { NetworkData, NetworkNode, NetworkEdge } from "../types";
 
 export const processNetworkFile = (file: UploadedFile): NetworkData => {
-  // 1. Validar archivo
-  if (!file.mimetype.includes('json')) {
-    throw new Error ('Solo se permiten archivos JSON');
+  // 1. Validar mimetype JSON
+  if (!file.mimetype.includes("json")) {
+    throw new Error("Solo se permiten archivos JSON");
   }
 
   // 2. Parsear el contenido
-  const content = file.data.toString('utf-8');
+  const content = file.data.toString("utf-8");
   const data = JSON.parse(content);
 
-  // 3. Validar la estructura del JSON
-  if (!data.nodes || !data.edges) {
-    throw new Error ('El archivo debe contener nodos y aristas');
+  // 3. Validar estructura
+  if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+    throw new Error("El archivo JSON debe contener arrays 'nodes' y 'edges'");
   }
 
-  // 4. Transformar datos
-  const nodes: Node[] = data.nodes.map((node: any) => ({
-    id: String(node.id),
-    lat: parseFloat(node.lat),
-    lng: parseFloat(node.lng)
+  // 4. Transformar nodos al tipo NetworkNode
+  const nodes: NetworkNode[] = data.nodes.map((n: any) => ({
+    id: String(n.id),
+    lat: parseFloat(n.lat),
+    lng: parseFloat(n.lng),
   }));
 
-  const edges: Edge[] = data.edges.map((edge: any) => ({
-    from: String(edge.from),
-    to: String(edge.to),
-    weight: parseFloat(edge.weight || '1')
-  }));
+  // 5. Transformar aristas al tipo NetworkEdge (usando 'distance' en lugar de 'weight')
+  const edges: NetworkEdge[] = data.edges.map((e: any) => {
+    const dist = e.distance !== undefined
+      ? parseFloat(e.distance)
+      : e.weight !== undefined
+        ? parseFloat(e.weight)
+        : 1;
 
-  // 5. Validar referencias
+    return {
+      from: String(e.from),
+      to:   String(e.to),
+      distance: isNaN(dist) ? 1 : dist
+    };
+  });
+
+  // 6. Validar referencias
   validateNetwork({ nodes, edges });
+
+  // 7. Devolver la red ya tipada
   return { nodes, edges };
 };
 
 const validateNetwork = (network: NetworkData) => {
-  const nodeIds = new Set(network.nodes.map(n => n.id));
-
-  network.edges.forEach(edge => {
-    if (!nodeIds.has(edge.from)) throw new Error(`Nodo ${edge.from} no encontrado`);
-    if (!nodeIds.has(edge.to)) throw new Error(`Nodo ${edge.to} no encontrado`);
-  });
+  const ids = new Set(network.nodes.map(n => n.id));
+  for (const edge of network.edges) {
+    if (!ids.has(edge.from)) throw new Error(`Nodo '${edge.from}' no encontrado`);
+    if (!ids.has(edge.to))   throw new Error(`Nodo '${edge.to}' no encontrado`);
+  }
 };
