@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { UploadedFile } from 'express-fileupload';
 import { parseOSM, Node, Edge } from '../utils/osmParser';
 
-const router = Router();
 
 interface FileUploadRequest extends Request {
   files?: {
@@ -10,8 +9,10 @@ interface FileUploadRequest extends Request {
   };
 }
 
+const router = Router();
+
 // POST / api/network/upload-osm
-router.post('/upload-osm', async (req: Request, res: Response)  => {
+router.post('/upload-osm', async (req: Request, res: Response) => {
   const fileReq = req as FileUploadRequest;
 
   // 1. Validar que venga el archivo .osm
@@ -22,9 +23,17 @@ router.post('/upload-osm', async (req: Request, res: Response)  => {
     });
   }
 
+  // 2. Leer contenido
+  const xml = fileReq.files.file.data.toString('utf-8');
+  if (!xml.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: 'El archivo .osm esta vacion o malformado'
+    });
+  }
+
   try {
-    // 2. Parsear el XML del OSM
-    const xml = fileReq.files.file.data.toString('utf-8');
+    
     const { nodes, edges }: { nodes: Node[], edges: Edge[] } = await parseOSM(xml);
 
     // 3. Preparar un mapa rapido de nodos para coordenadas
@@ -69,6 +78,7 @@ router.post('/upload-osm', async (req: Request, res: Response)  => {
     });
 
   } catch (err) {
+    console.error('Error en /upload-osm:', (err as Error).stack);
     const error = err as Error;
     return res.status(500).json({
       success: false,
