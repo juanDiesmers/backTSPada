@@ -4,7 +4,9 @@ const PORT = process.env.PORT || 5000;
 import cors from 'cors';
 import express from 'express';
 import fileUpload from 'express-fileupload';
+
 import netWorkRoutes from './routes/networkRoutes';
+import pointsRoutes  from './routes/pointsRoutes';
 
 const app = express();
 
@@ -19,6 +21,7 @@ app.use(fileUpload({
 
 // Montar el router
 app.use('/api/network', netWorkRoutes);
+app.use('/api/points', pointsRoutes);
 
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

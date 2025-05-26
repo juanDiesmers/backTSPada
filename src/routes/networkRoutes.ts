@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { UploadedFile } from 'express-fileupload';
 import { parseOSM, Node, Edge } from '../utils/osmParser';
+import { setMesh } from '../services/meshService';
 
 
 interface FileUploadRequest extends Request {
@@ -41,6 +42,9 @@ router.post('/upload-osm', async (req: Request, res: Response) => {
 
     // 4. Contruir el array de features GeoJSON
     const features: any[] = [];
+
+    // Guaradar la malla recien parseada
+    setMesh(nodes, edges);
 
     // 4.1 Features de tipo Point (nodos)
     for (const n of nodes) {
