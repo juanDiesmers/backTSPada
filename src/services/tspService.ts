@@ -7,49 +7,75 @@ export class TSPService {
   // 1) Fuerza bruta 
   // con poda (branch-and-bound) y ruta según malla
   static bruteForce(network: NetworkData, pointIds: string[]): RouteResult {
-    const t0 = Date.now();
-    const graph = this.buildGraph(network);
-    const distMap = this.computeDistanceMatrix(graph, pointIds);
+  const t0 = Date.now();
+  const timeLimitMs = 30_000;
+  console.log(`BruteForce: iniciando con ${pointIds.length} puntos`);
 
-    const n = pointIds.length;
-    let bestSeq: string[] = [];
-    let bestDist = Infinity;
+  // Construir grafo y matriz de distancias
+  const graph   = this.buildGraph(network);
+  const distMap = this.computeDistanceMatrix(graph, pointIds);
 
-    // DFS recursivo con poda
-    function dfs(curr: string, visited: Set<string>, seq: string[], dSoFar: number) {
-      if (dSoFar >= bestDist) return;
-      if (seq.length === n) {
-        bestDist = dSoFar;
-        bestSeq = [...seq];
-        return;
-      }
-      for (const nxt of pointIds) {
-        if (!visited.has(nxt)) {
-          const d = distMap[curr][nxt];
-          if (d === Infinity) continue;
-          visited.add(nxt);
-          seq.push(nxt);
-          dfs(nxt, visited, seq, dSoFar + d);
-          seq.pop();
-          visited.delete(nxt);
-        }
-      }
+  const n = pointIds.length;
+  let bestSeq: string[] = [];
+  let bestDist = Infinity;
+  let stopped = false;
+
+  // Contadores
+  let totalCalls = 0;
+  let skipVisited = 0;
+
+  function dfs(curr: string, visited: Set<string>, seq: string[], dSoFar: number) {
+    // Comprobación síncrona de timeout
+    if (Date.now() - t0 >= timeLimitMs) {
+      stopped = true;
+      return;
     }
+    totalCalls++;
 
-    // iniciar DFS desde cada punto
-    for (const start of pointIds) {
-      dfs(start, new Set([start]), [start], 0);
+    if (dSoFar >= bestDist) return;              // poda por cota superior
+    if (seq.length === n) {
+      bestDist = dSoFar;
+      bestSeq  = [...seq];
+      console.log(`▶ Mejor hasta ahora: dist=${bestDist}, seq=[${bestSeq.join('→')}]`);
+      return;
     }
-
-    // reconstruir ruta completa sobre la malla
-    const fullPath = this.buildFullPath(graph, bestSeq);
-
-    return {
-      path: fullPath,
-      distance: bestDist,
-      durationMs: Date.now() - t0
-    };
+    for (const nxt of pointIds) {
+      if (stopped) return;
+      if (visited.has(nxt)) {
+        skipVisited++;
+        continue;
+      }
+      const d = distMap[curr][nxt];
+      if (d === Infinity) continue;
+      visited.add(nxt);
+      seq.push(nxt);
+      dfs(nxt, visited, seq, dSoFar + d);
+      seq.pop();
+      visited.delete(nxt);
+    }
   }
+
+  // Arrancar DFS desde cada punto
+  for (const start of pointIds) {
+    if (stopped) break;
+    console.log(`DFS desde ${start}`);
+    dfs(start, new Set([start]), [start], 0);
+  }
+
+  console.log(`BruteForce: detenido tras ${Date.now() - t0} ms`);
+  console.log(`  totalCalls:  ${totalCalls}`);
+  console.log(`  skipVisited: ${skipVisited}`);
+  console.log(`  mejorDist:   ${bestDist}`);
+
+  // Reconstruir ruta completa sobre la malla
+  const fullPath = this.buildFullPath(graph, bestSeq);
+
+  return {
+    path:       fullPath,
+    distance:   bestDist,
+    durationMs: Date.now() - t0
+  };
+}
 
   // 2) Vecino más cercano
   static nearestNeighbor(network: NetworkData, pointIds: string[]): RouteResult {
