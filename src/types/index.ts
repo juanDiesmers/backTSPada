@@ -1,21 +1,8 @@
-/** Nodo de la malla vial con latitud/longitud */
-export interface NetworkNode {
-  id:  string;
-  lat: number;
-  lng: number;
-}
-
-/** Arista (conexión) entre dos nodos de la red */
-export interface NetworkEdge {
-  from:     string;
-  to:       string;
-  distance?: number;
-}
 
 /** Conjunto completo de la red vial */
 export interface NetworkData {
-  nodes: NetworkNode[];
-  edges: NetworkEdge[];
+  nodes: Node[];   // usa el tipo Node que ya tienes
+  edges: Edge[];   // usa el tipo Edge que ya tienes
 }
 
 /** Punto genérico (por ejemplo para snapping) */
@@ -49,5 +36,5 @@ export interface Node {
 export interface Edge {
   from: string;
   to:   string;
-  weight?: string;
+  distance: number;
 }

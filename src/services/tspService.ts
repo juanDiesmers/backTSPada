@@ -1,328 +1,315 @@
-import { NetworkData, NetworkEdge, Point, RouteResult, PopulationMember} from "../types";
+import { NetworkData, RouteResult, PopulationMember } from "../types";
+
+type Graph = Record<string, Record<string, number>>;
+
 
 export class TSPService {
+  // 1) Fuerza bruta 
+  // con poda (branch-and-bound) y ruta según malla
+  static bruteForce(network: NetworkData, pointIds: string[]): RouteResult {
+    const t0 = Date.now();
+    const graph = this.buildGraph(network);
+    const distMap = this.computeDistanceMatrix(graph, pointIds);
 
-  // Metodo de fuerza bruta(para pequeños conjuntos de datos)
-  static bruteForce(network: NetworkData, points: Point[]): RouteResult {
-    const startTime = Date.now();
-  
-    if (points.length > 10) {
-      throw new Error("El algoritmo de fuerza bruta no debe usarse con más de 10 puntos");
-    }
-  
-    const pointIds = points.map(point => point.id);
-    const permutations = this.generatePermutations(pointIds);
-    let shortestPath: string[] = [];
-    let minDistance = Infinity;
-  
-    for (const permutation of permutations) {
-      let currentDistance = 0;
-      let isValid = true;
-  
-      for (let i = 0; i < permutation.length - 1; i++) {
-        try {
-          const graph = this.buildGraph(network);
-          currentDistance += this.findShortestPathDistance(graph, permutation[i], permutation[i+1]);
-        } catch {
-          isValid = false;
-          break;
+    const n = pointIds.length;
+    let bestSeq: string[] = [];
+    let bestDist = Infinity;
+
+    // DFS recursivo con poda
+    function dfs(curr: string, visited: Set<string>, seq: string[], dSoFar: number) {
+      if (dSoFar >= bestDist) return;
+      if (seq.length === n) {
+        bestDist = dSoFar;
+        bestSeq = [...seq];
+        return;
+      }
+      for (const nxt of pointIds) {
+        if (!visited.has(nxt)) {
+          const d = distMap[curr][nxt];
+          if (d === Infinity) continue;
+          visited.add(nxt);
+          seq.push(nxt);
+          dfs(nxt, visited, seq, dSoFar + d);
+          seq.pop();
+          visited.delete(nxt);
         }
       }
-  
-      if (isValid && currentDistance < minDistance) {
-        minDistance = currentDistance;
-        shortestPath = permutation;
-      }
     }
-  
+
+    // iniciar DFS desde cada punto
+    for (const start of pointIds) {
+      dfs(start, new Set([start]), [start], 0);
+    }
+
+    // reconstruir ruta completa sobre la malla
+    const fullPath = this.buildFullPath(graph, bestSeq);
+
     return {
-      path: shortestPath,
-      distance: minDistance,
-      durationMs: Date.now() - startTime
+      path: fullPath,
+      distance: bestDist,
+      durationMs: Date.now() - t0
     };
   }
 
-  // Algoritmo del Vecino mas cercano
-  static nearestNeighbor(network: NetworkData, points: Point[]): RouteResult {
-    const startTime = Date.now();
-    this.validatePoints(network, points);
+  // 2) Vecino más cercano
+  static nearestNeighbor(network: NetworkData, pointIds: string[]): RouteResult {
+    const t0 = Date.now();
     const graph = this.buildGraph(network);
+    const distMap = this.computeDistanceMatrix(graph, pointIds);
 
-    let currentPoint = points[0].id;
-    const path: string[] = [currentPoint];
-    let totalDistance = 0;
-    const unvisited = new Set(points.slice(1).map(p => p.id));
+    const unvisited = new Set(pointIds.slice(1));
+    const seq = [pointIds[0]];
+    let total = 0;
+    let curr = seq[0];
 
-    while (unvisited.size > 0) {
-      let nearest: string | null = null;
-      let minDistance = Infinity;
-
-      unvisited.forEach(pointId => {
-        const distance = this.findShortestPathDistance(graph, currentPoint, pointId);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearest = pointId;
+    while (unvisited.size) {
+      let best: string | null = null;
+      let bestD = Infinity;
+      for (const pid of unvisited) {
+        const d = distMap[curr][pid];
+        if (d < bestD) {
+          bestD = d;
+          best = pid;
         }
-      });
-
-      if (!nearest) throw new Error("No se encontro ruta valida");
-
-      path.push(nearest);
-      totalDistance += minDistance;
-      unvisited.delete(nearest);
-      currentPoint = nearest;
+      }
+      if (!best) throw new Error("Ruta incompleta");
+      total += bestD;
+      seq.push(best);
+      unvisited.delete(best);
+      curr = best;
     }
 
-    return {
-      path,
-      distance: totalDistance,
-      durationMs: Date.now() - startTime
-    };
+    const fullPath = this.buildFullPath(graph, seq);
+
+    return { path: fullPath, distance: total, durationMs: Date.now() - t0 };
   }
 
-  // Algoritmo Genetico
-  static geneticAlgorithm(network: NetworkData, points: Point[], config = {
-    populationSize: 50,
-        generations: 100,
-        mutationRate: 0.02,
-        eliteSize: 5,
-        earlyStoppongRound: 5
-  }): RouteResult {
-    const startTime = Date.now();
-    this.validatePoints(network, points);
+  // 3) Genético
+   static geneticAlgorithm(
+    network: NetworkData,
+    pointIds: string[],
+    config = { populationSize: 50, generations: 100, mutationRate: 0.02, eliteSize: 5 }
+  ): RouteResult {
+    const t0 = Date.now();
     const graph = this.buildGraph(network);
-    const pointIds = points.map(p => p.id);
+    const distMap = this.computeDistanceMatrix(graph, pointIds);
 
-    // 1. Inicialización
-    let population = this.initializePopulation(pointIds, config.populationSize);
-    
-    // 2. Evaluación inicial
-    population = this.evaluatePopulation(population, graph);
-    let bestSolution = population[0];
+    // población inicial
+    let pop = Array.from({ length: config.populationSize }, () => {
+      const p = [...pointIds];
+      for (let i = p.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [p[i], p[j]] = [p[j], p[i]];
+      }
+      return p;
+    });
 
-    // 3. Evolución
+    // función de fitness
+    const evaluate = (population: string[][]) =>
+      population
+        .map(path => ({
+          path,
+          distance: path.slice(0, -1).reduce((sum, cur, i) => sum + distMap[cur][path[i + 1]], 0)
+        }))
+        .sort((a, b) => a.distance - b.distance);
+
+    let evaluated = evaluate(pop);
+    let bestSeq = evaluated[0].path;
+    let bestDist = evaluated[0].distance;
+
     for (let gen = 0; gen < config.generations; gen++) {
-      // Selección
-      const parents = this.tournamentSelection(population, config.populationSize / 2);
-      
-      // Cruce
-      const offspring = this.orderedCrossover(parents);
-      
-      // Mutación
-      this.mutatePopulation(offspring, config.mutationRate);
-      
-      // Evaluación
-      const evaluatedOffspring = this.evaluatePopulation(offspring, graph);
-      
-      // Reemplazo (estrategia elitista)
-      population = [...population.slice(0, config.eliteSize), ...evaluatedOffspring]
-        .sort((a, b) => a.distance - b.distance)
-        .slice(0, config.populationSize);
-      
-      // Actualizar mejor solución
-      if (population[0].distance < bestSolution.distance) {
-        bestSolution = population[0];
+      const nextGen = evaluated.slice(0, config.eliteSize).map(ind => ind.path);
+
+      while (nextGen.length < config.populationSize) {
+        const a = evaluated[Math.floor(Math.random() * config.eliteSize)].path;
+        const b = evaluated[Math.floor(Math.random() * config.eliteSize)].path;
+        const cut1 = Math.floor(Math.random() * pointIds.length);
+        const cut2 = cut1 + Math.floor(Math.random() * (pointIds.length - cut1));
+        const segment = a.slice(cut1, cut2);
+        const rest = b.filter(id => !segment.includes(id));
+        const child = [...rest.slice(0, cut1), ...segment, ...rest.slice(cut1)];
+
+        if (Math.random() < config.mutationRate) {
+          const i = Math.floor(Math.random() * child.length);
+          const j = Math.floor(Math.random() * child.length);
+          [child[i], child[j]] = [child[j], child[i]];
+        }
+        nextGen.push(child);
+      }
+
+      evaluated = evaluate(nextGen);
+      if (evaluated[0].distance < bestDist) {
+        bestDist = evaluated[0].distance;
+        bestSeq = evaluated[0].path;
       }
     }
 
-    return {
-      path: bestSolution.path,
-      distance: bestSolution.distance,
-      durationMs: Date.now() - startTime
-    };
+    const fullPath = this.buildFullPath(graph, bestSeq);
+
+    return { path: fullPath, distance: bestDist, durationMs: Date.now() - t0 };
   }
 
-  // Metodos Auxiliares
-
-  private static validatePoints(network: NetworkData, points: Point[]) {
-    const nodeIds = new Set(network.nodes.map(n => n.id));
-    const invalidPoints = points.filter(p => !nodeIds.has(p.id));
-
-    if (invalidPoints.length > 0) {
-      throw new Error(`Puntos no encontrados en la red: ${invalidPoints.map(p => p.id).join(', ')}`);
+  // --- Auxiliares ---
+  private static buildGraph(network: NetworkData): Graph {
+    const g: Graph = {};
+    for (const n of network.nodes) {
+      g[n.id] = {};
     }
+    for (const e of network.edges) {
+      g[e.from][e.to] = e.distance;
+      g[e.to][e.from] = e.distance;
+    }
+    return g;
   }
 
-  private static buildGraph(network: NetworkData): Record<string, Record<string, number>> {
-    const graph: Record<string, Record<string, number>> = {};
-    
-    network.nodes.forEach(node => {
-      graph[node.id] = {};
-    });
-
-    network.edges.forEach(edge => {
-      graph[edge.from][edge.to] = edge.distance || 0;
-      graph[edge.to][edge.from] = edge.distance || 0;
-    });
-
-    return graph;
+  /** Matriz de distancias punto a punto (lookup O(1)) */
+  private static computeDistanceMatrix(
+    graph: Graph,
+    points: string[]
+  ): Record<string, Record<string, number>> {
+    const m: Record<string, Record<string, number>> = {};
+    for (const p of points) {
+      m[p] = this.dijkstraDistances(graph, p);
+    }
+    return m;
   }
 
-  private static findShortestPathDistance(graph: Record<string, Record<string, number>>, start: string, end: string): number {
-    const distances: Record<string, number> = {};
+  /** Dijkstra que devuelve solo distancias */
+  private static dijkstraDistances(
+    graph: Graph,
+    start: string
+  ): Record<string, number> {
+    const dist: Record<string, number> = {};
     const visited = new Set<string>();
-    
-    Object.keys(graph).forEach(node => {
-      distances[node] = node === start ? 0 : Infinity;
+    Object.keys(graph).forEach(k => (dist[k] = Infinity));
+    dist[start] = 0;
+
+    const heap = new MinHeap<string>();
+    heap.push(start, 0);
+
+    while (!heap.isEmpty()) {
+      const { key: u, value: d } = heap.pop()!;
+      if (visited.has(u)) continue;
+      visited.add(u);
+      for (const [v, w] of Object.entries(graph[u])) {
+        if (!visited.has(v) && d + w < dist[v]) {
+          dist[v] = d + w;
+          heap.push(v, dist[v]);
+        }
+      }
+    }
+    return dist;
+  }
+
+  /** Reconstruye la ruta completa concatenando los segmentos */
+  private static buildFullPath(graph: Graph, seq: string[]): string[] {
+    const full: string[] = [];
+    for (let i = 0; i < seq.length - 1; i++) {
+      const { path: segment } = this.findShortestPath(graph, seq[i], seq[i + 1]);
+      if (i === 0) full.push(...segment);
+      else full.push(...segment.slice(1));
+    }
+    return full;
+  }
+
+  /** Dijkstra con prev para obtener la ruta entre dos nodos */
+  private static findShortestPath(
+    graph: Graph,
+    start: string,
+    end: string
+  ): { path: string[]; distance: number } {
+    const dist: Record<string, number> = {};
+    const prev: Record<string, string | null> = {};
+    const visited = new Set<string>();
+    Object.keys(graph).forEach(k => {
+      dist[k] = Infinity;
+      prev[k] = null;
     });
+    dist[start] = 0;
 
-    let currentNode  = start;
+    const heap = new MinHeap<string>();
+    heap.push(start, 0);
 
-    while (currentNode !== end) {
-      visited.add(currentNode);
+    while (!heap.isEmpty()) {
+      const { key: u, value: d } = heap.pop()!;
+      if (u === end) break;
+      if (visited.has(u)) continue;
+      visited.add(u);
 
-      Object.entries(graph[currentNode]).forEach(([neighbor, distance]) => {
-        if (!visited.has(neighbor)) {
-          const newDistance = distances[currentNode] + distance;
-          if (newDistance < distances[neighbor]) {
-            distances[neighbor] = newDistance;
-          }
-        }
-      });
-
-      let nextNode: string | null = null;
-      let minDistance = Infinity;
-
-      Object.entries(distances).forEach(([node, distance]) => {
-        if (!visited.has(node) && distance < minDistance) {
-          minDistance = distance;
-          nextNode = node;
-        }
-      });
-
-      if (!nextNode) throw new Error("No existe ruta entre los puntos");
-      currentNode = nextNode;
-    }
-
-    return distances[end];
-  }
-
-
-  private static generatePermutations(arr: string[]): string[][] {
-    if (arr.length <= 1) return [arr];
-    
-    const results: string[][] = [];
-
-    for (let i = 0; i < arr.length; i++) {
-      const current = arr[i];
-      const remaining = [...arr.slice(0, i), ...arr.slice(i + 1)];
-      const remainingPerms = this.generatePermutations(remaining);
-
-      for (const perm of remainingPerms) {
-        results.push([current, ...perm]);
-      }
-    }
-
-    return results;
-  }
-
-  private static findConnectingEdge(network: NetworkData, from: string, to: string): NetworkEdge | undefined {
-    return network.edges.find(e =>
-    (e.from === from && e.to === to) ||
-    (e.from === to && e.to === from)
-    );
-  }
-
-  // Metodos algoritmos geneticos
-  
-  private static initializePopulation(pointIds: string[], size: number): PopulationMember[] {
-    const population: PopulationMember[] = [];
-    const basePath = [...pointIds];
-    
-    for (let i = 0; i < size; i++) {
-      const shuffled = [...basePath];
-      for (let j = shuffled.length - 1; j > 0; j--) {
-        const k = Math.floor(Math.random() * (j + 1));
-        [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
-      }
-      population.push({ path: shuffled, distance: Infinity });
-    }
-    
-    return population;
-  }
-
-  private static evaluatePopulation(population: PopulationMember[], graph: Record<string, Record<string, number>>): PopulationMember[] {
-    return population.map(individual => {
-      let totalDistance = 0;
-      let isValid = true;
-      
-      for (let i = 0; i < individual.path.length - 1; i++) {
-        try {
-          totalDistance += this.findShortestPathDistance(graph, individual.path[i], individual.path[i+1]);
-        } catch {
-          isValid = false;
-          break;
+      for (const [v, w] of Object.entries(graph[u])) {
+        if (visited.has(v)) continue;
+        const alt = d + w;
+        if (alt < dist[v]) {
+          dist[v] = alt;
+          prev[v] = u;
+          heap.push(v, alt);
         }
       }
-      
-      return {
-        path: individual.path,
-        distance: isValid ? totalDistance : Infinity
-      };
-    }).sort((a, b) => a.distance - b.distance);
-  }
-
-  private static tournamentSelection(population: PopulationMember[], size: number): PopulationMember[] {
-    const selected: PopulationMember[] = [];
-    
-    while (selected.length < size) {
-      const candidates = [...population]
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 5);
-      
-      selected.push(candidates.reduce((best, current) => 
-        current.distance < best.distance ? current : best
-      ));
     }
-    
-    return selected;
-  }
 
-  private static orderedCrossover(parents: PopulationMember[]): PopulationMember[] {
-    const offspring: PopulationMember[] = [];
-    
-    for (let i = 0; i < parents.length; i += 2) {
-      if (i + 1 >= parents.length) break;
-      
-      const parent1 = parents[i].path;
-      const parent2 = parents[i+1].path;
-      const length = parent1.length;
-      
-      // Seleccionar segmento aleatorio
-      const start = Math.floor(Math.random() * length);
-      const end = Math.floor(Math.random() * (length - start)) + start;
-      
-      // Crear descendencia
-      const child1 = this.createOffspring(parent1, parent2, start, end);
-      const child2 = this.createOffspring(parent2, parent1, start, end);
-      
-      offspring.push(
-        { path: child1, distance: Infinity },
-        { path: child2, distance: Infinity }
-      );
+    // reconstruir camino
+    const path: string[] = [];
+    let cur: string | null = end;
+    if (prev[cur] === null && cur !== start) {
+      return { path: [], distance: Infinity };
     }
-    
-    return offspring;
+    while (cur) {
+      path.push(cur);
+      cur = prev[cur];
+    }
+    path.reverse();
+    return { path, distance: dist[end] };
+  }
+}
+
+/** Min-heap simple para Dijkstra */
+class MinHeap<K> {
+  private heap: { key: K; value: number }[] = [];
+
+  isEmpty() {
+    return this.heap.length === 0;
   }
 
-  private static createOffspring(parentA: string[], parentB: string[], start: number, end: number): string[] {
-    const segment = parentA.slice(start, end + 1);
-    const remaining = parentB.filter(gene => !segment.includes(gene));
-    
-    return [
-      ...remaining.slice(0, start),
-      ...segment,
-      ...remaining.slice(start)
-    ];
+  push(key: K, value: number) {
+    this.heap.push({ key, value });
+    this.heapifyUp(this.heap.length - 1);
   }
 
-  private static mutatePopulation(population: PopulationMember[], rate: number): void {
-    population.forEach(individual => {
-      if (Math.random() < rate) {
-        const i = Math.floor(Math.random() * individual.path.length);
-        const j = Math.floor(Math.random() * individual.path.length);
-        [individual.path[i], individual.path[j]] = [individual.path[j], individual.path[i]];
+  pop(): { key: K; value: number } | undefined {
+    if (!this.heap.length) return undefined;
+    const top = this.heap[0];
+    const last = this.heap.pop()!;
+    if (this.heap.length) {
+      this.heap[0] = last;
+      this.heapifyDown(0);
+    }
+    return top;
+  }
+
+  private heapifyUp(i: number) {
+    while (i > 0) {
+      const p = Math.floor((i - 1) / 2);
+      if (this.heap[p].value <= this.heap[i].value) break;
+      [this.heap[p], this.heap[i]] = [this.heap[i], this.heap[p]];
+      i = p;
+    }
+  }
+
+  private heapifyDown(i: number) {
+    const n = this.heap.length;
+    while (true) {
+      let left = 2 * i + 1,
+          right = 2 * i + 2,
+          smallest = i;
+      if (left < n && this.heap[left].value < this.heap[smallest].value) {
+        smallest = left;
       }
-    });
+      if (right < n && this.heap[right].value < this.heap[smallest].value) {
+        smallest = right;
+      }
+      if (smallest === i) break;
+      [this.heap[i], this.heap[smallest]] = [this.heap[smallest], this.heap[i]];
+      i = smallest;
+    }
   }
 }

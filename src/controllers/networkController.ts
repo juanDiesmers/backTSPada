@@ -1,5 +1,5 @@
 import { UploadedFile } from "express-fileupload";
-import { NetworkData, NetworkNode, NetworkEdge } from "../types";
+import { NetworkData, Node, Edge } from "../types";
 
 export const processNetworkFile = (file: UploadedFile): NetworkData => {
   // 1. Validar mimetype JSON
@@ -17,14 +17,14 @@ export const processNetworkFile = (file: UploadedFile): NetworkData => {
   }
 
   // 4. Transformar nodos al tipo NetworkNode
-  const nodes: NetworkNode[] = data.nodes.map((n: any) => ({
+  const nodes: Node[] = data.nodes.map((n: any) => ({
     id: String(n.id),
     lat: parseFloat(n.lat),
-    lng: parseFloat(n.lng),
+    lon: parseFloat(n.lon),
   }));
 
   // 5. Transformar aristas al tipo NetworkEdge (usando 'distance' en lugar de 'weight')
-  const edges: NetworkEdge[] = data.edges.map((e: any) => {
+  const edges: Edge[] = data.edge.map((e: any) => {
     const dist = e.distance !== undefined
       ? parseFloat(e.distance)
       : e.weight !== undefined

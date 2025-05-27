@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { UploadedFile } from 'express-fileupload';
 import { getMeshNodes } from '../services/meshService';
+import { setPoints } from '../services/pointsService';
+import { Point } from '../types';
 import { get } from 'http';
 
 interface FileUploadRequest extends Request {
@@ -80,7 +82,7 @@ router.post('/upload-points', (req: Request, res: Response) => {
     // Snap al nodo más cercano
     const node = snapToNode(origLat, origLng);
     return {
-      id,
+      id: node.id,
       // coordenadas alineadas
       lat: node.lat,
       lng: node.lon,
@@ -88,6 +90,8 @@ router.post('/upload-points', (req: Request, res: Response) => {
       snappedTo: node.id
     };
   });
+
+  setPoints(points);
 
   return res.status(200).json({ points });
 });
