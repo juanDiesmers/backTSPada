@@ -114,13 +114,78 @@ export class TSPService {
    static geneticAlgorithm(
     network: NetworkData,
     pointIds: string[],
-    config = { populationSize: 50, generations: 100, mutationRate: 0.02, eliteSize: 5 }
+    config = { populationSize: 50, generations: 100, mutationRate: 0.02, eliteSize: 5, tournamentSize: 3, earlyStop: 20 }
   ): RouteResult {
     const t0 = Date.now();
     const graph = this.buildGraph(network);
     const distMap = this.computeDistanceMatrix(graph, pointIds);
 
-    // población inicial
+    function routeDistance(route: string[]): number {
+      let sum = 0;
+      for (let i = 0; i < route.length - 1; i++) {
+        sum += distMap[route[i]][route[i + 1]];
+      }
+      return sum;
+    }
+
+    // Order Crossover (OX)
+    function orderCrossover(parent1: string[], parent2: string[]): string[] {
+      const n = parent1.length;
+      const [a, b] = [Math.floor(Math.random() * n), Math.floor(Math.random() * n)].sort((x, y) => x - y);
+      const child = Array(n).fill(null) as (string | null)[];
+      for (let i = a; i <= b; i++) child[i] = parent1[i];
+      let p2idx = 0;
+      for (let i = 0; i < n; i++) {
+        if (child[i] !== null) continue;
+        while (child.includes(parent2[p2idx])) p2idx++;
+        child[i] = parent2[p2idx];
+        p2idx++;
+      }
+      return child as string[];
+    }
+
+    // 2-opt mutation
+    function twoOpt(route: string[]): string[] {
+      const n = route.length;
+      if (n < 4) return route.slice();
+      let i = Math.floor(Math.random() * (n - 2));
+      let j = i + 2 + Math.floor(Math.random() * (n - i - 2));
+      return route.slice(0, i).concat(route.slice(i, j).reverse(), route.slice(j));
+    }
+
+    // Torneo
+    function tournament(pop: { path: string[]; distance: number }[], k: number): string[] {
+      let best = pop[Math.floor(Math.random() * pop.length)];
+      for (let i = 1; i < k; i++) {
+        const challenger = pop[Math.floor(Math.random() * pop.length)];
+        if (challenger.distance < best.distance) best = challenger;
+      }
+      return best.path;
+    }
+
+    // 2-opt local para mejorar rutas
+    function twoOptLocal(route: string[]): string[] {
+      let improved = true;
+      let best = route.slice();
+      let bestDist = routeDistance(best);
+      while (improved) {
+        improved = false;
+        for (let i = 1; i < best.length - 2; i++) {
+          for (let j = i + 1; j < best.length - 1; j++) {
+            const newRoute = best.slice(0, i).concat(best.slice(i, j + 1).reverse(), best.slice(j + 1));
+            const newDist = routeDistance(newRoute);
+            if (newDist < bestDist) {
+              best = newRoute;
+              bestDist = newDist;
+              improved = true;
+            }
+          }
+        }
+      }
+      return best;
+    }
+
+    // Inicialización
     let pop = Array.from({ length: config.populationSize }, () => {
       const p = [...pointIds];
       for (let i = p.length - 1; i > 0; i--) {
@@ -130,44 +195,53 @@ export class TSPService {
       return p;
     });
 
-    // función de fitness
-    const evaluate = (population: string[][]) =>
-      population
-        .map(path => ({
-          path,
-          distance: path.slice(0, -1).reduce((sum, cur, i) => sum + distMap[cur][path[i + 1]], 0)
-        }))
-        .sort((a, b) => a.distance - b.distance);
-
-    let evaluated = evaluate(pop);
-    let bestSeq = evaluated[0].path;
-    let bestDist = evaluated[0].distance;
+    let bestSeq = pop[0];
+    let bestDist = routeDistance(bestSeq);
+    let bestGen = 0;
+    let lastBest = bestDist;
 
     for (let gen = 0; gen < config.generations; gen++) {
-      const nextGen = evaluated.slice(0, config.eliteSize).map(ind => ind.path);
+      // Evaluar y ordenar
+      const evaluated = pop
+        .map(path => ({ path, distance: routeDistance(path) }))
+        .sort((a, b) => a.distance - b.distance);
 
+      // Elitismo con mejora local (2-opt)
+      const nextGen: string[][] = evaluated.slice(0, config.eliteSize).map(ind => twoOptLocal(ind.path));
+
+      // Actualizar mejor
+      if (routeDistance(nextGen[0]) < bestDist) {
+        bestDist = routeDistance(nextGen[0]);
+        bestSeq = nextGen[0];
+        bestGen = gen;
+      }
+
+      // Early stopping
+      if (gen - bestGen > config.earlyStop) break;
+
+      // Diversidad: si la población converge, reinyecta aleatorios
+      if (evaluated[0].distance === evaluated[evaluated.length - 1].distance) {
+        for (let i = 0; i < config.eliteSize; i++) {
+          const p = [...pointIds];
+          for (let j = p.length - 1; j > 0; j--) {
+            const k = Math.floor(Math.random() * (j + 1));
+            [p[j], p[k]] = [p[k], p[j]];
+          }
+          nextGen.push(p);
+        }
+      }
+
+      // Reproducir hasta llenar la población
       while (nextGen.length < config.populationSize) {
-        const a = evaluated[Math.floor(Math.random() * config.eliteSize)].path;
-        const b = evaluated[Math.floor(Math.random() * config.eliteSize)].path;
-        const cut1 = Math.floor(Math.random() * pointIds.length);
-        const cut2 = cut1 + Math.floor(Math.random() * (pointIds.length - cut1));
-        const segment = a.slice(cut1, cut2);
-        const rest = b.filter(id => !segment.includes(id));
-        const child = [...rest.slice(0, cut1), ...segment, ...rest.slice(cut1)];
-
+        const parent1 = tournament(evaluated, config.tournamentSize);
+        const parent2 = tournament(evaluated, config.tournamentSize);
+        let child = orderCrossover(parent1, parent2);
         if (Math.random() < config.mutationRate) {
-          const i = Math.floor(Math.random() * child.length);
-          const j = Math.floor(Math.random() * child.length);
-          [child[i], child[j]] = [child[j], child[i]];
+          child = twoOpt(child);
         }
         nextGen.push(child);
       }
-
-      evaluated = evaluate(nextGen);
-      if (evaluated[0].distance < bestDist) {
-        bestDist = evaluated[0].distance;
-        bestSeq = evaluated[0].path;
-      }
+      pop = nextGen;
     }
 
     const fullPath = this.buildFullPath(graph, bestSeq);
