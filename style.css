@@ -1,0 +1,103 @@
+/* Reset y layout */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: Arial, sans-serif; }
+body { display: flex; flex-direction: column; }
+
+/* Barra superior fija */
+#header {
+  background: #2d3748;
+  padding: 8px;
+  color: #fff;
+}
+.upload-controls {
+  display: flex;
+  gap: 16px;
+}
+.upload-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.upload-field label { width: 40px; }
+
+/* Container principal */
+#container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+#sidebar {
+  width: 280px;
+  background: #f7fafc;
+  border-right: 1px solid #e2e8f0;
+  padding: 12px;
+  overflow-y: auto;
+}
+.panel { margin-bottom: 24px; }
+.panel h2 {
+  font-size: 1.1em;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #cbd5e0;
+  padding-bottom: 4px;
+}
+
+/* Grid de botones de algoritmo */
+.btn-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.btn-algo {
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+}
+.btn-brute    { background: #e53e3e; }
+.btn-nearest  { background: #38a169; }
+.btn-genetic  { background: #3182ce; }
+.btn-run-all  { background: #805ad5; }
+
+/* Panel de capas */
+#layers-panel label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9em;
+}
+
+/* Resultados */
+.table-wrapper {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+#results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+#results-table th,
+#results-table td {
+  border: 1px solid #e2e8f0;
+  padding: 6px;
+  text-align: center;
+}
+.btn-clear {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 6px;
+  border: 1px solid #a0aec0;
+  border-radius: 4px;
+  background: #edf2f7;
+  cursor: pointer;
+}
+.btn-clear:hover {
+  background: #e2e8f0;
+}
+
+/* Mapa */
+#map { flex: 1; }

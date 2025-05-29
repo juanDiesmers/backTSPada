@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proyecto TSP - Frontend</title>
+  <link rel="stylesheet" href="leaflet/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Barra superior de subida de archivos -->
+  <header id="header">
+    <div class="upload-controls">
+      <div class="upload-field">
+        <label for="file-osm">OSM:</label>
+        <input type="file" id="file-osm" accept=".osm" />
+        <button id="btn-upload-osm">Cargar malla</button>
+      </div>
+      <div class="upload-field">
+        <label for="file-points">TSV:</label>
+        <input type="file" id="file-points" accept=".tsv" />
+        <button id="btn-upload-points">Cargar puntos</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="container">
+    <!-- Sidebar con algoritmos, capas y resultados -->
+    <aside id="sidebar">
+      <section class="panel" id="algo-panel">
+        <h2>Algoritmos</h2>
+        <div class="btn-grid">
+          <button class="btn-algo btn-brute" data-type="brute">Fuerza bruta</button>
+          <button class="btn-algo btn-nearest" data-type="nearest">Vecino cercano</button>
+          <button class="btn-algo btn-genetic" data-type="genetic">Genético</button>
+          <button class="btn-algo btn-run-all" data-type="run-all">Todos</button>
+        </div>
+      </section>
+
+      <section class="panel" id="layers-panel">
+        <h2>Capas</h2>
+        <label><input type="checkbox" id="toggle-mesh" checked /> Malla vial</label>
+        <label><input type="checkbox" id="toggle-points" checked /> Puntos</label>
+        <label><input type="checkbox" id="toggle-algo" checked /> Rutas</label>
+      </section>
+
+      <section class="panel" id="results-panel">
+        <h2>Resultados</h2>
+        <div class="table-wrapper">
+          <table id="results-table">
+            <thead>
+              <tr><th>Alg.</th><th>Distancia</th><th>Tiempo (ms)</th></tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+        <button id="btn-clear-results" class="btn-clear">Limpiar resultados</button>
+        <button id="btn-clear-map"     class="btn-clear">Limpiar mapa</button>
+      </section>
+    </aside>
+
+    <!-- Mapa ocupa el resto -->
+    <div id="map"></div>
+  </div>
+
+  <script src="leaflet/leaflet.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
