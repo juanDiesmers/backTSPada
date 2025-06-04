@@ -37,4 +37,19 @@ Debe responder **400** y un mensaje de error que mencione que no hay malla carga
 ## networkRoutesErrors.test.ts
 Incluye validaciones para `/api/network/upload-osm` en escenarios erróneos.
 - Si no se envía archivo debe responder **400** con un mensaje indicando que se requiere un `.osm`.
-- Si el archivo está vacío se obtiene también **400** con un error de archivo vacío o malformado.
+  - Si el archivo está vacío se obtiene también **400** con un error de archivo vacío o malformado.
+
+## test.ts
+Script de ejemplo que ejecuta los tres algoritmos del TSP sobre una malla más
+grande. Carga `fixtures/networkLarge.json` y `fixtures/pointsLarge.tsv` para
+mostrar por consola las rutas calculadas mediante:
+
+- Fuerza Bruta
+- Vecino más Cercano
+- Algoritmo Genético
+
+Se ejecuta con:
+
+```bash
+npx ts-node tests/test.ts
+```
