@@ -3,7 +3,6 @@ import { UploadedFile } from 'express-fileupload';
 import { getMeshNodes } from '../services/meshService';
 import { setPoints } from '../services/pointsService';
 import { Point } from '../types';
-import { get } from 'http';
 
 interface FileUploadRequest extends Request {
   files?: {
