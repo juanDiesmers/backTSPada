@@ -24,7 +24,7 @@ export const processNetworkFile = (file: UploadedFile): NetworkData => {
   }));
 
   // 5. Transformar aristas al tipo NetworkEdge (usando 'distance' en lugar de 'weight')
-  const edges: Edge[] = data.edge.map((e: any) => {
+  const edges: Edge[] = data.edges.map((e: any) => {
     const dist = e.distance !== undefined
       ? parseFloat(e.distance)
       : e.weight !== undefined
