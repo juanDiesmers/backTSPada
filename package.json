@@ -9,7 +9,7 @@
     "start": "ts-node src/server.ts",
     "dev": "nodemon src/server.ts",
     "build": "tsc",
-    "test": "ts-node tests/test.ts",
+    "test": "jest",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src/**/*.ts"
   },
