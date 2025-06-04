@@ -1,3 +1,4 @@
+
 # 📃 Guía de tests
 
 Este directorio recopila todas las pruebas automáticas del proyecto. Están escritas con **Jest** y **Supertest**. Para ejecutarlas simplemente usa:
