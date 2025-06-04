@@ -13,10 +13,14 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const uploadLimit = Math.floor(Number(process.env.UPLOAD_LIMIT_MB) * 1024 * 1024);
+
 app.use(
   fileUpload({
     createParentPath: true,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+    limits: { fileSize: uploadLimit },
+    abortOnLimit: true,
   })
 );
 
